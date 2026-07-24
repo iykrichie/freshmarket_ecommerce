@@ -158,6 +158,18 @@ When the customer checks **"Send as Diaspora Care Package / Family Gift"**:
 
 ---
 
+## 🧾 Official Receipt Generator Engine (`src/utils/receiptGenerator.ts`)
+
+FreshMarket Global includes a standalone client-side receipt compiler and print document renderer that generates professional HTML/PDF receipts for customers and store managers.
+
+### Core Capabilities:
+- **`generateReceiptHTML(order, storeSettings)`**: Generates a clean, inline-styled responsive HTML document containing store branding, order ID, items breakdown with unit prices, delivery destination, payment status, subtotal, discount, delivery fee, total, and tracking code.
+- **`downloadReceiptFile(order, storeSettings)`**: Triggers a direct browser file download (`Receipt_<orderNumber>.html` or PDF print dialog) using Blob URLs.
+- **`printReceiptDocument(order, storeSettings)`**: Opens a printable pop-up window containing the formatted receipt, executing auto-print (`window.print()`).
+- **Print CSS Scoping (`src/index.css`)**: Utilizes `@media print` rules with `.printable-receipt-area` and `.no-print` classes to ensure clean, isolated document printing without UI noise.
+
+---
+
 ## 🔌 Express Backend Endpoints (`server.ts`)
 
 | Endpoint | Method | Description |
