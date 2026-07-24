@@ -14,31 +14,24 @@
 
 <div align="center">
 
-### 🛒 1. Modern Customer Storefront & Product Showcase
-*Interactive catalog with unit switching (Bags, Export Boxes), category filters, live search, and deal timers.*
+### 🌟 1. Authentic Foodstuff Storefront & Global Export Hero Banner
+*Features a header bar with delivery location selector, global express badges, search bar, Track Order button, and popular foodstuff quick tags.*
 
-![FreshMarket Customer Storefront Showcase](https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=80)
-
-<br/>
-
-### 📦 2. Export-Grade Diaspora Care Package Packaging
-*Vacuum-sealed packaging for smoked fish, garri, yams, and palm oil with personalized gift notes for loved ones overseas.*
-
-![Vacuum Sealed Diaspora Export Packages](https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=80)
+![FreshMarket Global Storefront Hero Banner](./public/screenshots/hero_storefront.png)
 
 <br/>
 
-### 🧾 3. Live Order Tracking & PDF Receipt Generation
-*Real-time order status tracking with custom printable & downloadable PDF/HTML official receipts.*
+### 🌾 2. Foodstuff Product Catalog, Pricing & Unit Selector Grid
+*Interactive product catalog featuring authentic staples (Parboiled Rice, Ijebu Garri, Red Palm Oil, Honey Beans) with multi-unit badges, origin tags, Naira (₦) pricing, and one-click purchasing.*
 
-![Order Tracking and Printable PDF Receipts](https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1200&q=80)
+![FreshMarket Product Catalog & Pricing Grid](./public/screenshots/product_catalog.png)
 
 <br/>
 
-### 🔒 4. Secured Business Owner Admin Dashboard
-*Password-authenticated owner portal to manage live orders, stock inventory, delivery zones, and credentials.*
+### 📱 3. Full-Screen Storefront Experience
+*Clean, responsive layout optimized for desktop and mobile shoppers.*
 
-![Business Owner Admin Dashboard](https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80)
+![FreshMarket Full Storefront Interface](./public/screenshots/full_storefront.png)
 
 </div>
 
