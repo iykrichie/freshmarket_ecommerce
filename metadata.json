@@ -1,0 +1,6 @@
+{
+  "name": "FreshMarket Global",
+  "description": "Local & International African Foodstuff eCommerce Store with express local delivery, air export care packages, order tracking, and multi-currency options.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
