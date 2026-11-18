@@ -1,19 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
-import { PaymentMethod, Order } from '../types';
+import { PaymentMethod } from '../types';
 import {
   X,
   MapPin,
-  Phone,
   User,
   CreditCard,
-  Building,
-  DollarSign,
   ShieldCheck,
   CheckCircle2,
   Copy,
-  Upload,
-  Sparkles,
 } from 'lucide-react';
 
 export const CheckoutModal: React.FC = () => {
@@ -35,7 +30,6 @@ export const CheckoutModal: React.FC = () => {
     setActiveTrackingId,
     showToast,
     currentUser,
-    setIsUserAuthOpen,
   } = useStore();
 
   const [name, setName] = useState(currentUser?.fullName || '');
@@ -50,6 +44,22 @@ export const CheckoutModal: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('paystack');
   const [isProcessing, setIsProcessing] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
+
+  useEffect(() => {
+    if (currentUser) {
+      setName((prev) => prev || currentUser.fullName || '');
+      setPhone((prev) => prev || currentUser.phone || '');
+      setEmail((prev) => prev || currentUser.email || '');
+      setAddress((prev) => prev || currentUser.address || '');
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    const enabled = storeSettings.acceptedPaymentMethods;
+    if (enabled && enabled.length > 0 && !enabled.includes(paymentMethod)) {
+      setPaymentMethod(enabled[0]);
+    }
+  }, [storeSettings.acceptedPaymentMethods, paymentMethod]);
 
   if (!isCheckoutOpen) return null;
 
@@ -275,7 +285,7 @@ export const CheckoutModal: React.FC = () => {
                     <div className="space-y-2.5 pt-2 border-t border-amber-200/60 animate-fadeIn">
                       <div>
                         <label className="text-[11px] font-bold text-amber-900 block mb-1">
-                          Recipient Name in London/Overseas
+                          Recipient Full Name
                         </label>
                         <input
                           type="text"
@@ -310,87 +320,61 @@ export const CheckoutModal: React.FC = () => {
                 </h3>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('paystack')}
-                    className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                      paymentMethod === 'paystack'
-                        ? 'bg-green-600 text-white border-green-600 shadow-md'
-                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-black text-xs">Credit / Debit Card</span>
-                    <span
-                      className={`text-[10px] ${
-                        paymentMethod === 'paystack' ? 'text-green-100' : 'text-gray-500'
-                      }`}
-                    >
-                      Visa, Mastercard, Apple Pay
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('bank_transfer')}
-                    className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                      paymentMethod === 'bank_transfer'
-                        ? 'bg-green-600 text-white border-green-600 shadow-md'
-                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-black text-xs">UK Bank Transfer</span>
-                    <span
-                      className={`text-[10px] ${
-                        paymentMethod === 'bank_transfer' ? 'text-green-100' : 'text-gray-500'
-                      }`}
-                    >
-                      Faster Payments / Barclays
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('flutterwave')}
-                    className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                      paymentMethod === 'flutterwave'
-                        ? 'bg-green-600 text-white border-green-600 shadow-md'
-                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-black text-xs">Apple Pay / Google Pay</span>
-                    <span
-                      className={`text-[10px] ${
-                        paymentMethod === 'flutterwave' ? 'text-green-100' : 'text-gray-500'
-                      }`}
-                    >
-                      Instant express checkout
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethod('cod')}
-                    className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
-                      paymentMethod === 'cod'
-                        ? 'bg-green-600 text-white border-green-600 shadow-md'
-                        : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="font-black text-xs">Pay on Delivery</span>
-                    <span
-                      className={`text-[10px] ${
-                        paymentMethod === 'cod' ? 'text-green-100' : 'text-gray-500'
-                      }`}
-                    >
-                      Card / Cash with courier
-                    </span>
-                  </button>
+                  {(
+                    [
+                      {
+                        id: 'paystack' as PaymentMethod,
+                        title: 'Credit / Debit Card',
+                        sub: 'Visa, Mastercard, Apple Pay',
+                      },
+                      {
+                        id: 'bank_transfer' as PaymentMethod,
+                        title: 'Direct Bank Transfer',
+                        sub: storeSettings.bankDetails.bankName,
+                      },
+                      {
+                        id: 'flutterwave' as PaymentMethod,
+                        title: 'Apple Pay / Google Pay',
+                        sub: 'Instant express checkout',
+                      },
+                      {
+                        id: 'cod' as PaymentMethod,
+                        title: 'Pay on Delivery',
+                        sub: 'Card / Cash with courier',
+                      },
+                    ] as const
+                  )
+                    .filter((m) => {
+                      const enabled = storeSettings.acceptedPaymentMethods;
+                      return !enabled || enabled.length === 0 || enabled.includes(m.id);
+                    })
+                    .map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id)}
+                        className={`p-3 rounded-2xl border text-left flex flex-col gap-1 transition-all ${
+                          paymentMethod === m.id
+                            ? 'bg-green-600 text-white border-green-600 shadow-md'
+                            : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="font-black text-xs">{m.title}</span>
+                        <span
+                          className={`text-[10px] ${
+                            paymentMethod === m.id ? 'text-green-100' : 'text-gray-500'
+                          }`}
+                        >
+                          {m.sub}
+                        </span>
+                      </button>
+                    ))}
                 </div>
 
                 {/* Bank Details Display Box if Bank Transfer selected */}
                 {paymentMethod === 'bank_transfer' && (
                   <div className="p-3.5 bg-green-50 rounded-2xl border border-green-200 space-y-2">
-                    <p className="text-xs font-bold text-green-900">UK Business Bank Details:</p>
+                    <p className="text-xs font-bold text-green-900">Business Bank Transfer Details:</p>
                     <div className="bg-white p-3 rounded-xl border border-green-100 flex items-center justify-between">
                       <div className="text-xs">
                         <p className="text-gray-500">{storeSettings.bankDetails.bankName}</p>

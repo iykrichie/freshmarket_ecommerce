@@ -1,317 +1,227 @@
-# 🚀 FreshMarket Global — Local Testing, Architecture & Deployment Guide
+# 🚀 Deployment, Local Testing & Subscription Provisioning Guide
 
-This comprehensive guide provides step-by-step instructions for **locally running & testing** FreshMarket Global, detailed breakdown of the **Frontend, Backend, and Data Storage Architecture**, and hosting deployment guides across **Google Cloud Run**, **Docker Containers**, **Render/Railway**, and **Linux VPS (Ubuntu/Nginx)**.
-
----
-
-## 📋 Table of Contents
-1. [Architecture & Technical Stack](#1-architecture--technical-stack)
-   - [Frontend Architecture](#frontend-architecture)
-   - [Backend Architecture](#backend-architecture)
-   - [Data Storage & State Persistence](#data-storage--state-persistence)
-2. [Local Development & Testing Guide](#2-local-development--testing-guide)
-   - [Prerequisites](#prerequisites)
-   - [Installation & Environment Setup](#installation--environment-setup)
-   - [Running in Development Mode](#running-in-development-mode)
-   - [Testing Production Build Locally](#testing-production-build-locally)
-   - [Running Type & Linting Verification](#running-type--linting-verification)
-   - [Running Visual Screenshot & Smoke Tests](#running-visual-screenshot--smoke-tests)
-3. [Production Build Architecture](#3-production-build-architecture)
-4. [Option 1: Google Cloud Run (Recommended Container Deployment)](#option-1-google-cloud-run-recommended-container-deployment)
-5. [Option 2: Docker Container Deployment](#option-2-docker-container-deployment)
-6. [Option 3: Render / Railway / Fly.io](#option-3-render--railway--flyio)
-7. [Option 4: Linux VPS Setup (Ubuntu + PM2 + Nginx)](#option-4-linux-vps-setup-ubuntu--pm2--nginx)
-8. [Environment Variables Reference](#environment-variables-reference)
-9. [SSL & Custom Domain Configuration](#ssl--custom-domain-configuration)
+This guide covers **local development and verification**, the **hybrid client/server data layer**, **one-time subscriber provisioning** (`npm run init` & Browser Setup Wizard), and production deployments across **Docker**, **Google Cloud Run**, **Render/Railway**, and **Ubuntu VPS (PM2 + Nginx)**.
 
 ---
 
-## 1. Architecture & Technical Stack
+## 1. Architecture Overview (Frontend, Backend & Data Layer)
 
-FreshMarket Global is built as a full-stack Node.js web application engineered for optimal performance, instant client reactivity, and robust server-side security.
+FreshMarket Global is packaged as a **self-contained full-stack Node.js application** with zero external database dependencies required to boot:
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        BROWSER CLIENT (REACT 18)                       │
-│  - Reactive UI & Unit Selectors  - Slide-Over Shopping Cart           │
-│  - Multi-Step Checkout           - Order Tracker & PDF Receipt Generator│
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / REST / Vite Middleware
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                        NODE.JS EXPRESS BACKEND                         │
-│  - Development: Express + Vite Middleware (tsx server.ts)              │
-│  - Production: Standalone Bundled CommonJS (node dist/server.cjs)       │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                       DATA STORAGE & PERSISTENCE                       │
-│  - LocalStorage Engine (freshmarket_store_data_v1)                      │
-│  - Hydrated React Context State (Products, Cart, Orders, Admin Settings)│
-│  - Express API Proxy Endpoints for Future Firestore / Cloud SQL DBs    │
-└────────────────────────────────────────────────────────────────────────┘
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     BROWSER CLIENT (REACT 19 + VITE)                    │
+│  - Reactive Storefront + 6-Step First-Run Setup Wizard                  │
+│  - StoreContext  ──►  StoreRepository (src/data/repository.ts)          │
+│      • Schema-versioned localStorage cache (fm_schema_version = 2)      │
+│      • Runtime input sanitization, cart stock clamping & snapshot checks│
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │ HTTP JSON API (/api/*)
+┌───────────────────────────────────▼─────────────────────────────────────┐
+│                    NODE.JS EXPRESS SERVER (server.ts)                   │
+│  - Dev:  tsx server.ts (Express + Vite middleware on port 3000)         │
+│  - Prod: node dist/server.cjs (esbuild CJS bundle + /dist static cache) │
+│  - Security: x-powered-by disabled, nosniff, no-referrer, scrypt auth   │
+└───────────────────────────────────┬─────────────────────────────────────┘
+                                    │ Atomic Temp-File + Rename Writes
+┌───────────────────────────────────▼─────────────────────────────────────┐
+│                 SELF-CONTAINED SERVER STORAGE (/data)                   │
+│  - data/tenant-config.json : Brand settings, scrypt hash, catalog,      │
+│                              categories, zones, coupons & subscription  │
+│  - data/orders.json        : Server-persisted order ledger & tracking   │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Frontend Architecture
-- **Core Library:** React 18.3 with TypeScript (strict type compliance).
-- **Styling:** Tailwind CSS with Lucide React Icons for vector iconography and Motion (`motion/react`) for smooth route transitions and modal dialogs.
-- **Client Utilities:** Custom PDF/HTML print and download engine (`receiptGenerator.ts`) enabling printable receipts without external dynamic dependencies.
-- **Modular Components:** Divided into clean functional domains (`CartDrawer`, `CheckoutModal`, `OrderTrackingModal`, `AdminDashboard`, `ProductCard`, etc.).
-
-### Backend Architecture
-- **Runtime:** Node.js Express server (`server.ts`).
-- **Development Integration:** Express mounts Vite middleware (`createViteServer`) during development mode (`process.env.NODE_ENV !== "production"`) for hot module replacement (HMR) and SPA routing fallback.
-- **Production Bundle:** Compiles backend TypeScript to CommonJS (`dist/server.cjs`) via `esbuild`, bundling relative paths and bypassing Node ESM runtime restrictions for fast cold starts in Cloud Run containers.
-
-### Data Storage & State Persistence
-- **Client-Side Storage Engine:** Application state (products, customer cart, live orders, discount codes, delivery zone rates, and owner admin credentials) is managed via `StoreContext.tsx`.
-- **LocalStorage Persistence:** State automatically synchronizes with browser `localStorage` under the key `freshmarket_store_data_v1`. This ensures user cart items, order tracking numbers, and custom admin updates persist across browser restarts and offline reloads.
-- **Extensible Database Integration:** The Express server (`server.ts`) is designed with proxy route structures (`/api/*`), making it seamlessly pluggable into cloud databases like **Firebase Firestore** or **Cloud SQL (PostgreSQL)** for multi-device sync without exposing secrets client-side.
+### Data Layer Best Practices Built In
+1. **Repository Abstraction (`src/data/repository.ts`)**: Isolates storage serialization, schema migrations, runtime validation, and `fetch` calls away from UI components.
+2. **Atomic Disk Persistence (`server.ts` & `scripts/init-store.mjs`)**: Writes JSON to a process-scoped temporary file before calling `fs.renameSync`, preventing truncated config or order files on crash/restart.
+3. **Salted `scrypt` Password Hashing**: Owner passwords saved to `data/tenant-config.json` are hashed using `crypto.scryptSync` with a 16-byte random salt and verified via `crypto.timingSafeEqual`. Public `/api/bootstrap` responses strip password hashes completely.
+4. **Offline-Resilient Dual Persistence**: Customers get zero-latency cart/catalog interaction via `localStorage` while orders, stock deductions, and store initialization sync cleanly to the Express backend when running in full-stack mode.
 
 ---
 
-## 2. Local Development & Testing Guide
-
-Follow these steps to run, test, and verify the application on your local workstation.
+## 2. Local Development & Verification
 
 ### Prerequisites
-- **Node.js**: v18.0.0 or higher (`node -v`)
-- **npm**: v9.0.0 or higher (`npm -v`) or **bun** (`bun -v`)
+- **Node.js**: v18.0+ (v20 LTS recommended)
+- **npm**: v9.0+
 
-### Installation & Environment Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-username/freshmarket-global.git
-   cd freshmarket-global
-   ```
-
-2. **Install project dependencies:**
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables:**
-   Copy `.env.example` to create your local `.env` file:
-   ```bash
-   cp .env.example .env
-   ```
-   *Note: Default configuration works out of the box on port 3000.*
-
----
-
-### Running in Development Mode
-
-To launch the full-stack application with Vite live reloading:
-
+### Setup & Run Locally
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Create local environment file
+cp .env.example .env
+
+# 3. Start full-stack dev server (Express + Vite on port 3000)
 npm run dev
 ```
+Open:
+- **Storefront**: `http://localhost:3000`
+- **Health Probe**: `http://localhost:3000/api/health`
+- **Bootstrap State**: `http://localhost:3000/api/bootstrap`
+- **Force Browser Setup Wizard**: `http://localhost:3000/?setup=1`
 
-- **Application URL:** [http://localhost:3000](http://localhost:3000)
-- **Health Check Endpoint:** [http://localhost:3000/api/health](http://localhost:3000/api/health)
-
-In development mode, `tsx server.ts` starts Express and hooks into Vite's middleware, allowing instant code changes on both client components and server code.
-
----
-
-### Testing Production Build Locally
-
-Before deploying to production (e.g. Cloud Run or Docker), test the bundled build on your machine:
-
-1. **Compile the production assets:**
-   ```bash
-   npm run build
-   ```
-   *This generates static SPA files in `dist/` and the compiled server entry point at `dist/server.cjs`.*
-
-2. **Launch the standalone production server:**
-   ```bash
-   npm start
-   ```
-
-3. **Verify local production server:**
-   Open [http://localhost:3000](http://localhost:3000) in your browser. Verify that page routing, cart drawer interactions, checkout flow, order tracking, and receipt downloads work seamlessly.
-
----
-
-### Running Type & Linting Verification
-
-Run TypeScript type checks to ensure there are no compilation errors:
-
+### Local Verification Commands
 ```bash
+# TypeScript static type validation (must exit with 0 errors)
 npm run lint
+
+# Full production build (Vite SPA -> dist/ + Express -> dist/server.cjs)
+npm run build
+
+# Run the production bundle locally on http://localhost:3000
+npm start
 ```
 
-If the command completes cleanly without output, all TypeScript definitions, components, and backend route signatures are valid.
-
----
-
-### Running Visual Screenshot & Smoke Tests
-
-The project includes an automated Puppeteer script for capturing high-resolution UI screenshots:
-
+### Visual Screenshot Capture
 ```bash
 node scripts/capture.js
 ```
-
-Screenshots will be generated and saved in `public/screenshots/`:
-- `hero_storefront.png`
-- `product_catalog.png`
-- `full_storefront.png`
+Outputs updated storefront captures into `public/screenshots/`.
 
 ---
 
-## 3. Production Build Architecture
+## 3. Provisioning the Package for Subscription Buyers
 
-FreshMarket Global utilizes an integrated Express + Vite full-stack node runtime:
+When shipping this package to a paying subscriber, choose either **Self-Service Onboarding** (buyer configures in browser) or **Zero-Touch CLI Provisioning** (you pre-configure before handoff).
 
-```
+### Option A: Buyer Self-Service Browser Wizard
+Prepare the instance so the 6-step **Setup Wizard** opens automatically on the buyer's first visit:
+
+```bash
+npm run init -- --web-wizard
 npm run build
-  ├── 1. vite build ──> Bundles React SPA into /dist (static HTML, JS, CSS)
-  └── 2. esbuild server.ts ──> Bundles Node server into /dist/server.cjs (CommonJS)
-
 npm start
-  └── Executes `node dist/server.cjs` listening on 0.0.0.0:3000
+```
+This sets `SETUP_REQUIRED="true"` in `.env` and clears any prior `data/tenant-config.json`. Once the buyer completes the 6 steps, the store writes `data/tenant-config.json` and locks the wizard (`initialized: true`) so shoppers never see it.
+
+### Option B: Interactive Terminal Provisioning
+```bash
+npm run init
+```
+Walks through Plan Tier (`starter` / `growth` / `enterprise`), Billing Cycle, License Key generation, Brand Name, Currency, WhatsApp/Phone, Payout Bank Details, and Owner Admin Login.
+
+### Option C: Automated / CI Non-Interactive Provisioning
+```bash
+npm run init -- --non-interactive \
+  --store "Kola Foods UK" \
+  --plan growth \
+  --cycle annual \
+  --currency GBP \
+  --symbol "£" \
+  --email "orders@kolafoods.co.uk" \
+  --adminEmail "owner@kolafoods.co.uk" \
+  --password "StrongBuyerPassword123!" \
+  --phone "+44 7700 900123" \
+  --whatsapp "447700900123"
+```
+Then build and start:
+```bash
+npm run build && npm start
 ```
 
 ---
 
-## Option 1: Google Cloud Run (Recommended Container Deployment)
+## 4. Docker Deployment (with Persistent `/app/data` Volume)
 
-Google Cloud Run provides serverless, auto-scaling container hosting that scales down to zero when idle.
-
-### Step 1: Create a `Dockerfile`
-Create a `Dockerfile` in the root of your workspace:
+Create a `Dockerfile` in the root directory:
 
 ```dockerfile
-# Build Stage
 FROM node:20-alpine AS builder
-
 WORKDIR /app
-
-# Copy dependency specifications
 COPY package.json package-lock.json* bun.lock* ./
-
-# Install dependencies
 RUN npm ci || npm install
-
-# Copy source code
 COPY . .
-
-# Build application (Vite + esbuild server compilation)
 RUN npm run build
 
-# Production Runtime Stage
 FROM node:20-alpine AS runner
-
 WORKDIR /app
-
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy built dist directory and package specs
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 
+RUN mkdir -p /app/data && chown -R node:node /app/data
+VOLUME ["/app/data"]
+
 EXPOSE 3000
-
 USER node
-
 CMD ["node", "dist/server.cjs"]
 ```
 
-### Step 2: Deploy to Google Cloud Run using gcloud CLI
+Build and run with persistent tenant data mounted:
+```bash
+docker build -t freshmarket-storefront:latest .
+
+docker run -d \
+  --name buyer-store-01 \
+  -p 3000:3000 \
+  -v $(pwd)/tenant-data:/app/data \
+  -e SETUP_REQUIRED=true \
+  --restart unless-stopped \
+  freshmarket-storefront:latest
+```
+
+---
+
+## 5. Google Cloud Run Deployment
 
 ```bash
-# Set Google Cloud Project ID
 gcloud config set project YOUR_GCP_PROJECT_ID
 
-# Build and submit image to Google Artifact Registry / Container Registry
-gcloud builds submit --tag gcr.io/YOUR_GCP_PROJECT_ID/freshmarket-global:latest
+gcloud builds submit --tag gcr.io/YOUR_GCP_PROJECT_ID/freshmarket-storefront:latest
 
-# Deploy to Cloud Run
-gcloud run deploy freshmarket-global \
-  --image gcr.io/YOUR_GCP_PROJECT_ID/freshmarket-global:latest \
+gcloud run deploy freshmarket-storefront \
+  --image gcr.io/YOUR_GCP_PROJECT_ID/freshmarket-storefront:latest \
   --platform managed \
   --region europe-west2 \
   --allow-unauthenticated \
   --port 3000 \
   --memory 512Mi \
-  --cpu 1
+  --cpu 1 \
+  --set-env-vars "NODE_ENV=production,SETUP_REQUIRED=true"
 ```
 
+> **Note on Serverless Containers**: Because Cloud Run container filesystems are ephemeral across revisions/scale-to-zero, mount a Cloud Storage FUSE volume to `/app/data` or attach a managed database (Firestore / Cloud SQL) for long-lived multi-revision persistence.
+
 ---
 
-## Option 2: Docker Container Deployment
+## 6. Render / Railway Deployment
 
-If running on Docker Desktop or Docker Swarm:
+- **Build Command**: `npm install && npm run build`
+- **Start Command**: `npm start`
+- **Persistent Disk (Recommended)**: Mount a disk at `/app/data` so `tenant-config.json` and `orders.json` survive redeploys.
+- **Port**: `PORT=3000`
+
+---
+
+## 7. Ubuntu VPS (PM2 + Nginx + Let's Encrypt SSL)
 
 ```bash
-# 1. Build Docker image
-docker build -t freshmarket-global:latest .
-
-# 2. Run container mapping port 3000
-docker run -d \
-  --name freshmarket-app \
-  -p 3000:3000 \
-  -e NODE_ENV=production \
-  --restart always \
-  freshmarket-global:latest
-```
-
----
-
-## Option 3: Render / Railway / Fly.io
-
-### Render
-1. Connect your GitHub repository to [Render.com](https://render.com).
-2. Create a **Web Service**.
-3. Set Environment to **Node**.
-4. Set Build Command: `npm install && npm run build`
-5. Set Start Command: `npm start`
-6. Set Port environment variable `PORT=3000`.
-
-### Railway
-1. Import repository into [Railway.app](https://railway.app).
-2. Railway auto-detects `package.json` scripts.
-3. Configure `PORT=3000`.
-
----
-
-## Option 4: Linux VPS Setup (Ubuntu + PM2 + Nginx)
-
-For deployment on AWS EC2, DigitalOcean Droplet, or Linode:
-
-### 1. Install Node.js & PM2
-```bash
+# Install Node 20, Nginx, and PM2
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt-get install -y nodejs nginx
 sudo npm install -g pm2
-```
 
-### 2. Clone & Build Application
-```bash
-git clone https://github.com/your-username/freshmarket-global.git /var/www/freshmarket
-cd /var/www/freshmarket
+# Deploy & initialize store
+cd /var/www/buyer-store
 npm install
+npm run init          # Provision brand, subscription & owner password
 npm run build
+pm2 start dist/server.cjs --name "buyer-store" --env production
+pm2 save && pm2 startup
 ```
 
-### 3. Start Process with PM2
-```bash
-pm2 start dist/server.cjs --name "freshmarket" --env production
-pm2 save
-pm2 startup
-```
-
-### 4. Configure Nginx Reverse Proxy
-Edit `/etc/nginx/sites-available/default`:
-
+Configure Nginx reverse proxy (`/etc/nginx/sites-available/buyer-store`):
 ```nginx
 server {
     listen 80;
-    server_name freshmarketglobal.com www.freshmarketglobal.com;
+    server_name shop.buyerdomain.com;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -319,38 +229,33 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 }
 ```
-
-Reload Nginx:
+Enable HTTPS:
 ```bash
-sudo nginx -t && sudo systemctl reload nginx
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d shop.buyerdomain.com
 ```
 
 ---
 
-## Environment Variables Reference
+## 8. Environment Variables Reference
 
-Define these environment variables in your server configuration or `.env`:
-
-| Variable Name | Required | Default | Description |
+| Variable | Required | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `PORT` | Yes | `3000` | Server listening port |
-| `NODE_ENV` | Yes | `production` | Node environment (`development` or `production`) |
-| `GEMINI_API_KEY` | Optional | - | API key for Gemini AI intelligent store features |
-
----
-
-## SSL & Custom Domain Configuration
-
-### Using Certbot (Let's Encrypt) for Nginx:
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d freshmarketglobal.com -d www.freshmarketglobal.com
-```
-
-Your FreshMarket Global application will now be live with full HTTPS encryption!
+| `PORT` | Yes | `3000` | Express server listening port |
+| `NODE_ENV` | Prod | `production` | `development` mounts Vite HMR; `production` serves `dist/` |
+| `SETUP_REQUIRED` | Optional | `false` | Set `true` to auto-launch the 1-time Setup Wizard on first visit |
+| `SUBSCRIPTION_PLAN` | Optional | `growth` | Initial tier (`starter`, `growth`, `enterprise`) |
+| `SUBSCRIPTION_LICENSE_KEY` | Optional | `FM-GRW-TRIAL-2026` | Pre-assigned license key |
+| `STORE_NAME` | Optional | `FreshMarket Global` | Fallback brand name prior to `tenant-config.json` initialization |
+| `STORE_CURRENCY` | Optional | `GBP` | ISO currency code (`GBP`, `USD`, `NGN`, `EUR`, etc.) |
+| `STORE_CURRENCY_SYMBOL` | Optional | `£` | Display symbol (`£`, `$`, `₦`, `€`) |
+| `STORE_PHONE` | Optional | `+44 20 7946 0912` | Store support telephone |
+| `STORE_WHATSAPP` | Optional | `447911123456` | WhatsApp digits without `+` |
+| `STORE_EMAIL` | Optional | `orders@freshmarketglobal.com` | Customer support email |
+| `FREE_DELIVERY_THRESHOLD` | Optional | `50` | Minimum subtotal for free shipping |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Optional | - | Optional env override when `tenant-config.json` is absent |

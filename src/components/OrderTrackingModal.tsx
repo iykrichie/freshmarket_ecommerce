@@ -1,20 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
 import { Order, OrderStatus } from '../types';
+import { StoreRepository } from '../data/repository';
 import { downloadReceiptFile, printReceiptDocument } from '../utils/receiptGenerator';
 import {
   X,
   Search,
   CheckCircle2,
-  Clock,
-  PackageCheck,
   Truck,
-  MapPin,
   Phone,
   Printer,
   Download,
   RotateCcw,
-  Sparkles,
 } from 'lucide-react';
 
 const STATUS_STEPS: { key: OrderStatus; label: string; desc: string }[] = [
@@ -30,7 +27,6 @@ export const OrderTrackingModal: React.FC = () => {
     isTrackingOpen,
     setIsTrackingOpen,
     activeTrackingId,
-    setActiveTrackingId,
     orders,
     addToCart,
     storeSettings,
@@ -39,16 +35,41 @@ export const OrderTrackingModal: React.FC = () => {
   } = useStore();
 
   const [searchInput, setSearchInput] = useState(activeTrackingId || '');
+  const [remoteOrder, setRemoteOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    if (activeTrackingId) {
+      setSearchInput(activeTrackingId);
+    }
+  }, [activeTrackingId]);
+
+  const normalizedQuery = searchInput.trim().toLowerCase();
+  const localMatchedOrder = normalizedQuery
+    ? orders.find(
+        (o) =>
+          o.orderNumber.toLowerCase() === normalizedQuery ||
+          o.trackingCode.toLowerCase() === normalizedQuery ||
+          (searchInput.trim().length >= 5 && o.customerInfo.phone.includes(searchInput.trim()))
+      )
+    : orders[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isTrackingOpen || localMatchedOrder || normalizedQuery.length < 4) {
+      setRemoteOrder(null);
+      return;
+    }
+    StoreRepository.trackOrderOnServer(searchInput.trim()).then((found) => {
+      if (!cancelled) setRemoteOrder(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isTrackingOpen, localMatchedOrder, normalizedQuery, searchInput]);
 
   if (!isTrackingOpen) return null;
 
-  // Find matching order by ID or phone
-  const matchedOrder = orders.find(
-    (o) =>
-      o.orderNumber.toLowerCase() === searchInput.trim().toLowerCase() ||
-      o.trackingCode.toLowerCase() === searchInput.trim().toLowerCase() ||
-      o.customerInfo.phone.includes(searchInput.trim())
-  ) || orders[0];
+  const matchedOrder = localMatchedOrder || remoteOrder;
 
   const getStepIndex = (status: OrderStatus) => {
     switch (status) {

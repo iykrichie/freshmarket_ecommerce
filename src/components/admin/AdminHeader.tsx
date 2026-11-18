@@ -1,9 +1,17 @@
 import React from 'react';
 import { useStore } from '../../context/StoreContext';
-import { ShieldCheck, Store, Bell, AlertTriangle, LogOut, KeyRound } from 'lucide-react';
+import { ShieldCheck, Store, Bell, AlertTriangle, LogOut } from 'lucide-react';
 
 export const AdminHeader: React.FC = () => {
-  const { setViewMode, products, orders, storeSettings, setIsAdminAuthenticated, showToast } = useStore();
+  const {
+    setViewMode,
+    setActiveAdminTab,
+    products,
+    orders,
+    storeSettings,
+    setIsAdminAuthenticated,
+    showToast,
+  } = useStore();
 
   const lowStockCount = products.filter((p) => p.stock <= 5).length;
   const pendingOrdersCount = orders.filter((o) => o.status === 'pending').length;
@@ -15,58 +23,64 @@ export const AdminHeader: React.FC = () => {
   };
 
   return (
-    <header className="bg-slate-950 text-white border-b border-slate-800 sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+    <header className="bg-stone-950 text-white border-b border-stone-800 sticky top-0 z-40">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 gap-4">
           {/* Brand */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-md">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-400 text-stone-950 flex items-center justify-center font-bold shrink-0">
               <ShieldCheck className="w-5 h-5" />
             </div>
-            <div>
-              <span className="font-black text-base tracking-tight text-white block leading-none">
+            <div className="min-w-0">
+              <span className="font-display font-bold text-base tracking-tight text-white block leading-none truncate">
                 {storeSettings.storeName}
               </span>
-              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mt-0.5">
-                Authenticated Business Owner
+              <span className="text-[10px] font-semibold text-amber-300 uppercase tracking-wider block mt-0.5">
+                Store Owner Console
               </span>
             </div>
           </div>
 
-          {/* Center alerts pills */}
-          <div className="hidden md:flex items-center gap-3">
+          {/* Actionable Alerts */}
+          <div className="hidden md:flex items-center gap-2.5 shrink-0">
             {pendingOrdersCount > 0 && (
-              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse">
+              <button
+                onClick={() => setActiveAdminTab('orders')}
+                className="bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors tabular-nums"
+              >
                 <Bell className="w-3.5 h-3.5" />
                 <span>{pendingOrdersCount} Pending Orders</span>
-              </span>
+              </button>
             )}
 
             {lowStockCount > 0 && (
-              <span className="bg-red-500/20 text-red-300 border border-red-500/30 text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1.5">
+              <button
+                onClick={() => setActiveAdminTab('inventory')}
+                className="bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors tabular-nums"
+              >
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>{lowStockCount} Low Stock Items</span>
-              </span>
+                <span>{lowStockCount} Low Stock</span>
+              </button>
             )}
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setViewMode('storefront')}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-md active:scale-95"
+              className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition-colors whitespace-nowrap"
             >
               <Store className="w-4 h-4" />
-              <span className="hidden sm:inline">Store View</span>
+              <span className="hidden sm:inline">View Storefront</span>
             </button>
 
             <button
               onClick={handleAdminLogout}
-              className="flex items-center gap-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 font-bold text-xs px-3 py-2 rounded-xl transition-colors"
+              className="flex items-center gap-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 font-semibold text-xs px-3 py-2 rounded-xl transition-colors whitespace-nowrap"
               title="Log Out Admin Dashboard"
             >
               <LogOut className="w-4 h-4" />
-              <span>Log Out Admin</span>
+              <span>Log Out</span>
             </button>
           </div>
         </div>

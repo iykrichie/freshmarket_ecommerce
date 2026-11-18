@@ -6,7 +6,9 @@ export const WhatsAppOrderButton: React.FC = () => {
   const { storeSettings } = useStore();
   const [showTooltip, setShowTooltip] = useState(true);
 
-  const whatsappUrl = `https://wa.me/${storeSettings.whatsappNumber}?text=Hello%20FreshMarket!%20I%20want%20to%20place%20a%20foodstuff%20order.`;
+  const whatsappUrl = `https://wa.me/${storeSettings.whatsappNumber}?text=${encodeURIComponent(
+    `Hello ${storeSettings.storeName}! I want to place an order.`
+  )}`;
 
   return (
     <div className="fixed bottom-6 left-6 z-40 flex items-center gap-2 print:hidden">

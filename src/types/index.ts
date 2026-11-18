@@ -1,4 +1,4 @@
-export type UnitType =
+export type PresetUnitType =
   | '50kg Bag'
   | '25kg Bag'
   | '20kg Bag'
@@ -24,6 +24,14 @@ export type UnitType =
   | 'Care Package'
   | 'Export Pack';
 
+export type UnitType = PresetUnitType | (string & {});
+
+export interface ProductUnitOption {
+  unit: UnitType;
+  price: number;
+  discountPrice?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -31,7 +39,7 @@ export interface Product {
   price: number;
   discountPrice?: number;
   unit: UnitType;
-  availableUnits?: { unit: UnitType; price: number; discountPrice?: number }[];
+  availableUnits?: ProductUnitOption[];
   weight?: string;
   description: string;
   stock: number;
@@ -83,7 +91,7 @@ export interface Coupon {
   id: string;
   code: string;
   discountType: 'percentage' | 'fixed';
-  value: number; // e.g. 10 for 10% or 1000 for ₦1,000
+  value: number;
   minOrderAmount: number;
   expiryDate: string;
   usageLimit?: number;
@@ -153,8 +161,38 @@ export interface ProductReview {
   verifiedPurchase: boolean;
 }
 
+export type SubscriptionPlanId = 'starter' | 'growth' | 'enterprise';
+export type SubscriptionStatus = 'active' | 'trial' | 'past_due' | 'cancelled';
+export type BillingCycle = 'monthly' | 'annual';
+
+export interface SubscriptionInfo {
+  planId: SubscriptionPlanId;
+  planName: string;
+  status: SubscriptionStatus;
+  billingCycle: BillingCycle;
+  licenseKey: string;
+  subscriberName: string;
+  subscriberEmail: string;
+  customDomain?: string;
+  startedAt: string;
+  renewsAt: string;
+  monthlyPrice: number;
+  maxProducts: number;
+  maxZones: number;
+  setupCompleted: boolean;
+  setupCompletedAt?: string;
+}
+
 export interface StoreSettings {
   storeName: string;
+  tagline?: string;
+  logoUrl?: string;
+  announcementText?: string;
+  heroBadge?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  footerDescription?: string;
+  copyrightName?: string;
   currency: string;
   currencySymbol: string;
   supportPhone: string;
@@ -162,9 +200,12 @@ export interface StoreSettings {
   email: string;
   facebookUrl?: string;
   instagramUrl?: string;
+  twitterUrl?: string;
+  tiktokUrl?: string;
   freeDeliveryThreshold: number;
   address: string;
   operationalHours: string;
+  acceptedPaymentMethods?: PaymentMethod[];
   bankDetails: {
     bankName: string;
     accountNumber: string;
@@ -175,6 +216,17 @@ export interface StoreSettings {
     email: string;
     passwordHash?: string;
   };
+}
+
+export interface StoreSnapshot {
+  version: number;
+  exportedAt: string;
+  storeSettings: StoreSettings;
+  categories: Category[];
+  products: Product[];
+  deliveryZones: DeliveryZone[];
+  coupons: Coupon[];
+  subscription?: SubscriptionInfo;
 }
 
 export interface UserAccount {
@@ -193,4 +245,3 @@ export interface AdminUser {
   role: 'owner' | 'manager';
   loginTime: string;
 }
-

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UnitType, ProductReview } from '../types';
 import { useStore } from '../context/StoreContext';
 import {
@@ -16,6 +16,7 @@ import {
   ThumbsUp,
 } from 'lucide-react';
 import { INITIAL_REVIEWS } from '../data/mockData';
+import { ResilientImage } from './ResilientImage';
 
 export const ProductDetailModal: React.FC = () => {
   const {
@@ -31,22 +32,28 @@ export const ProductDetailModal: React.FC = () => {
     showToast,
   } = useStore();
 
-  if (!viewingProduct) return null;
-
-  const [activeImage, setActiveImage] = useState<string>(
-    viewingProduct.image || viewingProduct.images[0]
-  );
-  const [selectedUnit, setSelectedUnit] = useState<UnitType>(viewingProduct.unit);
+  const [activeImage, setActiveImage] = useState<string>('');
+  const [selectedUnit, setSelectedUnit] = useState<UnitType>('Unit');
   const [quantity, setQuantity] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'details' | 'reviews'>('details');
 
   // Reviews state
-  const [reviews, setReviews] = useState<ProductReview[]>(
-    INITIAL_REVIEWS.filter((r) => r.productId === viewingProduct.id)
-  );
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [newReviewName, setNewReviewName] = useState('');
   const [newReviewRating, setNewReviewRating] = useState(5);
   const [newReviewComment, setNewReviewComment] = useState('');
+
+  useEffect(() => {
+    if (viewingProduct) {
+      setActiveImage(viewingProduct.image || viewingProduct.images?.[0] || '');
+      setSelectedUnit(viewingProduct.unit);
+      setQuantity(1);
+      setActiveTab('details');
+      setReviews(INITIAL_REVIEWS.filter((r) => r.productId === viewingProduct.id));
+    }
+  }, [viewingProduct]);
+
+  if (!viewingProduct) return null;
 
   const inWishlist = isInWishlist(viewingProduct.id);
 
@@ -100,7 +107,7 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const whatsappInquiryUrl = `https://wa.me/${storeSettings.whatsappNumber}?text=${encodeURIComponent(
-    `Hello FreshMarket! I am interested in buying: ${viewingProduct.name} (${selectedUnit}). Current price: ${storeSettings.currencySymbol}${effectivePrice.toLocaleString()}`
+    `Hello ${storeSettings.storeName}! I am interested in buying: ${viewingProduct.name} (${selectedUnit}). Current price: ${storeSettings.currencySymbol}${effectivePrice.toLocaleString()}`
   )}`;
 
   return (
@@ -119,9 +126,10 @@ export const ProductDetailModal: React.FC = () => {
             {/* Left: Product Images */}
             <div className="space-y-4">
               <div className="relative aspect-square rounded-2xl overflow-hidden bg-gray-50 border border-gray-100 shadow-xs">
-                <img
+                <ResilientImage
                   src={activeImage}
                   alt={viewingProduct.name}
+                  fallbackLabel={viewingProduct.name}
                   className="w-full h-full object-cover"
                 />
                 {hasDiscount && (
@@ -144,7 +152,11 @@ export const ProductDetailModal: React.FC = () => {
                           : 'border-gray-200 opacity-70 hover:opacity-100'
                       }`}
                     >
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                      <ResilientImage
+                        src={img}
+                        alt={viewingProduct.name}
+                        className="w-full h-full object-cover"
+                      />
                     </button>
                   ))}
                 </div>
@@ -277,9 +289,9 @@ export const ProductDetailModal: React.FC = () => {
                     ✈️
                   </div>
                   <div className="text-xs">
-                    <p className="font-bold text-amber-950">Diaspora & Export Service Available</p>
+                    <p className="font-bold text-amber-950">International Export & Gift Service</p>
                     <p className="text-[11px] text-amber-800">
-                      Send as a care package to relatives in London, UK nationwide, Europe, or USA with custom gift notes.
+                      Send as a care package to family or businesses locally or worldwide with custom gift notes.
                     </p>
                   </div>
                 </div>

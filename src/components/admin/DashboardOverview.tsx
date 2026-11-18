@@ -4,11 +4,9 @@ import {
   DollarSign,
   ShoppingBag,
   Clock,
-  CheckCircle2,
   AlertTriangle,
   TrendingUp,
   ArrowUpRight,
-  Package,
 } from 'lucide-react';
 
 export const DashboardOverview: React.FC = () => {
@@ -20,7 +18,6 @@ export const DashboardOverview: React.FC = () => {
   const deliveredOrders = orders.filter((o) => o.status === 'delivered');
 
   const lowStockProducts = products.filter((p) => p.stock <= 5);
-  const bestSellers = products.filter((p) => p.isBestSeller || p.rating >= 4.8).slice(0, 4);
 
   return (
     <div className="space-y-6">
@@ -74,9 +71,12 @@ export const DashboardOverview: React.FC = () => {
           <div className="flex items-baseline justify-between">
             <span className="text-2xl font-black text-gray-900">{pendingOrders.length}</span>
             {pendingOrders.length > 0 && (
-              <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md animate-pulse">
+              <button
+                onClick={() => setActiveAdminTab('orders')}
+                className="text-[10px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2 py-0.5 rounded-md transition-colors"
+              >
                 Needs Action
-              </span>
+              </button>
             )}
           </div>
           <p className="text-[11px] text-gray-400">Orders awaiting processing</p>

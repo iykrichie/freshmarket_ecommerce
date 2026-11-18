@@ -215,14 +215,14 @@ export const OrderManagement: React.FC = () => {
                     <span>
                       {i.product.name} ({i.selectedUnit}) x{i.quantity}
                     </span>
-                    <span>₦{(i.unitPrice * i.quantity).toLocaleString()}</span>
+                    <span>{storeSettings.currencySymbol}{(i.unitPrice * i.quantity).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
 
               <div className="border-t pt-2 font-black text-sm flex justify-between text-green-700">
                 <span>Total Amount:</span>
-                <span>₦{selectedOrderForInvoice.totalAmount.toLocaleString()}</span>
+                <span>{storeSettings.currencySymbol}{selectedOrderForInvoice.totalAmount.toLocaleString()}</span>
               </div>
             </div>
 

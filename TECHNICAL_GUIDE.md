@@ -1,40 +1,83 @@
-# ⚙️ FreshMarket Global — Technical Architecture Guide
+# ⚙️ Technical & Data Layer Architecture Guide
 
-This guide details the internal system architecture, data models, state management, checkout workflow, and API routes for developers working on or expanding **FreshMarket Global**.
-
----
-
-## 📐 Architecture Overview
-
-FreshMarket Global is structured as a client-side reactive Single Page Application (SPA) driven by React 18, Tailwind CSS, and a Node.js Express server.
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Client Browser                         │
-│                                                             │
-│   React SPA (UI Components, Modals, Checkout, Drawer)       │
-│                                 ▲                           │
-│                                 │ React Context API         │
-│                                 ▼                           │
-│                 StoreContext (Global Application State)     │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ HTTP / JSON API
-┌──────────────────────────────▼──────────────────────────────┐
-│                    Express Backend Runtime                  │
-│                                                             │
-│   server.ts  ───► API Routes (/api/health, /api/store-info) │
-│              ───► Static Asset Serving (/dist in prod)      │
-│              ───► Vite Middleware Mode (in dev)             │
-└─────────────────────────────────────────────────────────────┘
-```
+This reference documents the system architecture, data layer best practices, TypeScript schemas, state lifecycle, spreadsheet/image pipelines, and Express REST endpoints.
 
 ---
 
-## 🗃️ Core Data Models & Schema (`src/types/index.ts`)
+## 1. System Architecture
 
-### 1. `Product`
-Represents an item in the marketplace:
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│                        React 19 SPA Components                       │
+│  Storefront (Header, CategorySidebar, ProductCard, CartDrawer, ...)   │
+│  Onboarding (SetupWizard)  |  Admin Console (src/components/admin/*) │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │ useStore()
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                    StoreContext (src/context/StoreContext.tsx)       │
+│  - Memoized callbacks & cart computations                            │
+│  - Cart stock validation & price/availability reconciliation         │
+│  - Skips redundant initial-mount localStorage writes                 │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                  StoreRepository (src/data/repository.ts)            │
+│  - Schema migration (STORAGE_SCHEMA_VERSION = 2)                     │
+│  - Runtime shape sanitizers (products, zones, settings, snapshots)   │
+│  - Optimistic localStorage cache + async Express API sync            │
+└──────────────────────────────────┬───────────────────────────────────┘
+                                   │ HTTP JSON (/api/*)
+┌──────────────────────────────────▼───────────────────────────────────┐
+│                   Express Runtime (server.ts)                        │
+│  - Atomic JSON writes (temp file + rename)                           │
+│  - Salted scrypt password hashing & timing-safe verification         │
+│  - data/tenant-config.json  |  data/orders.json                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Data Layer Best Practices Implemented
+
+### A. Repository Isolation & Schema Versioning (`src/data/repository.ts`)
+- All `localStorage` keys are centralized in `STORAGE_KEYS` and versioned with `STORAGE_SCHEMA_VERSION = 2`.
+- `ensureStorageSchemaMigration()` automatically upgrades legacy caches cleanly without throwing JSON parse errors.
+- `StoreContext` initializes state once via `StoreRepository.loadLocalState()` and uses a `hasMountedRef` guard so initial hydration does not trigger unnecessary synchronous `localStorage.setItem` writes.
+
+### B. Runtime Validation & Sanitization
+- Every persisted or imported entity passes through dedicated sanitizers:
+  - `sanitizeProduct`: Clamps negative prices/stock, validates `availableUnits`, normalizes gallery arrays.
+  - `sanitizeDeliveryZones`: Ensures positive delivery fees and valid min/max hour bounds.
+  - `sanitizeStoreSettings` & `sanitizeSubscription`: Merges nested objects (`bankDetails`, `adminCredentials`) safely against defaults so partial configs never break components.
+  - `sanitizeSnapshot`: Validates `.json` store bundle uploads before updating state.
+
+### C. Cart Integrity & Stock Reconciliation
+- `addToCart` and `updateCartQuantity` validate against live `product.stock`, reject out-of-stock additions, and clamp quantities to available inventory.
+- A reconciliation effect in `StoreContext` automatically updates cart unit prices or removes discontinued/out-of-stock items whenever the admin modifies the catalog.
+
+### D. Atomic Server Persistence & Credential Hardening (`server.ts`)
+- **`writeJsonAtomic(filePath, data)`**: Writes serialized JSON to `${filePath}.${pid}.${timestamp}.tmp` and atomically renames it into place via `fs.renameSync`.
+- **Credential Security**: Passwords submitted to `POST /api/initialize`, `POST /api/tenant/sync`, or `npm run init` are hashed with `crypto.scryptSync(password, randomSalt16Bytes, 64)` (`scrypt:<salt>:<hash>`) and verified using `crypto.timingSafeEqual`. Public `/api/bootstrap` payloads strip `passwordHash`.
+- **HTTP Hardening**: `x-powered-by` is disabled, and responses include `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`.
+
+### E. Spreadsheet & Export Security
+- `ReportsSection.tsx` escapes leading formula characters (`=`, `+`, `-`, `@`, `\t`, `\r`) in CSV cells to prevent spreadsheet formula injection.
+- Blob object URLs created for JSON/CSV/Receipt downloads are explicitly revoked with `URL.revokeObjectURL`.
+
+---
+
+## 3. Core Domain Schemas (`src/types/index.ts`)
+
+### `Product` & `ProductUnitOption`
 ```typescript
+export type UnitType = PresetUnitType | (string & {});
+
+export interface ProductUnitOption {
+  unit: UnitType;
+  price: number;
+  discountPrice?: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -42,12 +85,12 @@ export interface Product {
   price: number;
   discountPrice?: number;
   unit: UnitType;
-  availableUnits?: UnitOption[];
-  weight: string;
+  availableUnits?: ProductUnitOption[];
+  weight?: string;
   description: string;
   stock: number;
   image: string;
-  images?: string[];
+  images: string[];
   rating: number;
   reviewsCount: number;
   isFeatured?: boolean;
@@ -59,122 +102,103 @@ export interface Product {
 }
 ```
 
-### 2. `UnitType`
-Flexible packaging units supported by the system:
+### `Order` & `OrderCustomerInfo`
 ```typescript
-export type UnitType =
-  | '50kg Bag'
-  | '25kg Bag'
-  | '20kg Bag'
-  | '10kg Bag'
-  | '5kg Bag'
-  | 'Paint Rubber'
-  | '5L Bottle'
-  | '4L Bottle'
-  | '1L Bottle'
-  | 'Carton'
-  | 'Crate'
-  | '1kg Pack'
-  | '1kg Box'
-  | '500g Tub'
-  | '5kg Box'
-  | 'Case of 24'
-  | 'Single Hen'
-  | 'Tubers'
-  | 'Basket'
-  | 'Piece'
-  | 'Bunch'
-  | 'Diaspora Box'
-  | 'Care Package'
-  | 'Export Pack';
-```
+export type OrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'packed'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'cancelled';
 
-### 3. `Order` & `ShippingAddress`
-Captures both local delivery and international diaspora care package recipients:
-```typescript
-export interface ShippingAddress {
-  fullName: string;
-  email: string;
-  phone: string;
-  streetAddress: string;
-  community: string;
-  landmark?: string;
-  notes?: string;
-  isCarePackage?: boolean;
-  recipientName?: string;
-  giftMessage?: string;
-}
+export type PaymentMethod = 'cod' | 'bank_transfer' | 'paystack' | 'flutterwave';
 
 export interface Order {
   id: string;
   orderNumber: string;
-  createdAt: string;
   items: CartItem[];
   subtotal: number;
-  discountAmount: number;
   deliveryFee: number;
+  discountAmount: number;
+  couponCode?: string;
   totalAmount: number;
-  shippingAddress: ShippingAddress;
-  paymentMethod: 'paystack' | 'bank_transfer' | 'cod';
+  customerInfo: {
+    name: string;
+    phone: string;
+    email?: string;
+    deliveryAddress: string;
+    community: string;
+    landmark?: string;
+    notes?: string;
+    isCarePackage?: boolean;
+    recipientName?: string;
+    giftMessage?: string;
+  };
+  paymentMethod: PaymentMethod;
   paymentStatus: 'pending' | 'paid' | 'failed';
-  orderStatus: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  trackingNumber: string;
+  status: OrderStatus;
+  createdAt: string;
   estimatedDelivery: string;
+  trackingCode: string;
+  driverInfo?: { name: string; phone: string };
+}
+```
+
+### `SubscriptionInfo` & `StoreSnapshot`
+```typescript
+export interface SubscriptionInfo {
+  planId: 'starter' | 'growth' | 'enterprise';
+  planName: string;
+  status: 'active' | 'trial' | 'past_due' | 'cancelled';
+  billingCycle: 'monthly' | 'annual';
+  licenseKey: string;
+  subscriberName: string;
+  subscriberEmail: string;
+  customDomain?: string;
+  startedAt: string;
+  renewsAt: string;
+  monthlyPrice: number;
+  maxProducts: number;
+  maxZones: number;
+  setupCompleted: boolean;
+  setupCompletedAt?: string;
+}
+
+export interface StoreSnapshot {
+  version: number;
+  exportedAt: string;
+  storeSettings: StoreSettings;
+  categories: Category[];
+  products: Product[];
+  deliveryZones: DeliveryZone[];
+  coupons: Coupon[];
+  subscription?: SubscriptionInfo;
 }
 ```
 
 ---
 
-## 🔄 Global State Management (`src/context/StoreContext.tsx`)
+## 4. Utility Pipelines
 
-The store application state is centralized via `StoreContext`, exposing reactive hooks across all views:
-
-### Key State Objects:
-- **`products`**: Array of catalog items (`Product[]`) with live stock counters.
-- **`cart`**: Array of items added (`CartItem[]`), tracking selected unit option and quantity.
-- **`orders`**: Active and historic customer orders (`Order[]`).
-- **`deliveryZones`**: Local borough zones & international air export matrix (`DeliveryZone[]`).
-- **`storeSettings`**: Store identity, phone, email, currency symbol, and bank transfer account details.
-
-### Core Methods:
-- `addToCart(product, quantity, selectedUnit)`
-- `updateCartQuantity(productId, quantity, selectedUnit)`
-- `removeFromCart(productId, selectedUnit)`
-- `applyCoupon(code)`
-- `createOrder(shippingAddress, paymentMethod)`
-- `updateOrderStatus(orderId, status)`
-- `toggleFavorite(productId)`
-
----
-
-## ✈️ Checkout & Diaspora Care Package Logic
-
-During checkout (`CheckoutModal.tsx`), customers can select from local express delivery zones or international air export destinations.
-
-When the customer checks **"Send as Diaspora Care Package / Family Gift"**:
-1. Extra state fields `recipientName` and `giftMessage` are captured.
-2. The order payload stores these details in `shippingAddress`.
-3. The invoice and admin order tracker display a dedicated **✈️ Diaspora Export Care Package** tag along with the recipient name and custom gift note card.
-
----
-
-## 🧾 Official Receipt Generator Engine (`src/utils/receiptGenerator.ts`)
-
-FreshMarket Global includes a standalone client-side receipt compiler and print document renderer that generates professional HTML/PDF receipts for customers and store managers.
-
-### Core Capabilities:
-- **`generateReceiptHTML(order, storeSettings)`**: Generates a clean, inline-styled responsive HTML document containing store branding, order ID, items breakdown with unit prices, delivery destination, payment status, subtotal, discount, delivery fee, total, and tracking code.
-- **`downloadReceiptFile(order, storeSettings)`**: Triggers a direct browser file download (`Receipt_<orderNumber>.html` or PDF print dialog) using Blob URLs.
-- **`printReceiptDocument(order, storeSettings)`**: Opens a printable pop-up window containing the formatted receipt, executing auto-print (`window.print()`).
-- **Print CSS Scoping (`src/index.css`)**: Utilizes `@media print` rules with `.printable-receipt-area` and `.no-print` classes to ensure clean, isolated document printing without UI noise.
-
----
-
-## 🔌 Express Backend Endpoints (`server.ts`)
-
-| Endpoint | Method | Description |
+| Module | Purpose | Key Functions |
 | :--- | :--- | :--- |
-| `/api/health` | `GET` | Health check probe returning API status, store name, and timestamp. |
-| `/api/store-info` | `GET` | Returns store metadata, operational hours, currency symbols, and customer support channels. |
+| `src/utils/inventorySpreadsheet.ts` | Bulk `.xlsx`/`.csv` import & export | `parseInventoryFile`, `buildUpdatedAndNewProducts`, `exportInventorySpreadsheet`, `downloadInventoryTemplate` |
+| `src/utils/imageProcessor.ts` | Client-side canvas compression & auto-matching | `compressImageFile` (`WebP`/`JPEG`), `matchFilenameToProduct`, `getPresetImagesFromCategories` |
+| `src/utils/receiptGenerator.ts` | Customer invoice compiler & print formatter | `generateReceiptHTML`, `downloadReceiptFile`, `printReceiptDocument` |
 
-In production mode (`NODE_ENV=production`), the Express server serves static compiled HTML/JS assets directly from `dist/` and falls back to `index.html` for single-page client routing.
+---
+
+## 5. Express Backend API Reference (`server.ts`)
+
+| Endpoint | Method | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| `/api/health` | `GET` | Public | Returns `{ status: 'ok', initialized, timestamp }` |
+| `/api/bootstrap` | `GET` | Public | Returns `{ initialized, setupRequired, config }` (credential hashes stripped) |
+| `/api/initialize` | `POST` | Uninit or Owner | Persists 1-time setup into `data/tenant-config.json` with salted `scrypt` hash |
+| `/api/admin/login` | `POST` | Credentials | Verifies owner login against `data/tenant-config.json` |
+| `/api/tenant/sync` | `POST` | Owner | Syncs updated settings, catalog, zones, coupons & subscription to disk |
+| `/api/orders` | `POST` | Public | Persists new customer order to `data/orders.json` and deducts server stock/coupon usage |
+| `/api/orders/track` | `GET` | Public | Looks up an order by `?q=<orderNumber\|trackingCode>` across devices |
+| `/api/orders/:id/status` | `PATCH` | Owner | Updates order status and optional courier driver details on disk |
+| `/api/store-info` | `GET` | Public | Returns live store name, currency, contact channels & initialization flag |

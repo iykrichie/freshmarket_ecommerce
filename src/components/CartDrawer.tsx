@@ -56,27 +56,23 @@ export const CartDrawer: React.FC = () => {
     }
   };
 
-  const handleWhatsAppOrder = () => {
-    if (cart.length === 0) return;
+  const sym = storeSettings.currencySymbol;
+  const itemsText = cart
+    .map(
+      (i) =>
+        `• ${i.product.name} (${i.selectedUnit}) x${i.quantity} = ${sym}${(
+          i.unitPrice * i.quantity
+        ).toLocaleString()}`
+    )
+    .join('\n');
 
-    let itemsText = cart
-      .map(
-        (i) =>
-          `• ${i.product.name} (${i.selectedUnit}) x${i.quantity} = ₦${(
-            i.unitPrice * i.quantity
-          ).toLocaleString()}`
-      )
-      .join('\n');
+  const whatsappMessage = `Hello ${storeSettings.storeName}! I want to order:\n\n${itemsText}\n\n*Subtotal:* ${sym}${cartSubtotal.toLocaleString()}\n*Delivery Fee (${
+    selectedZone?.name || 'Default'
+  }):* ${sym}${cartDeliveryFee.toLocaleString()}\n*Total:* ${sym}${cartTotal.toLocaleString()}\n\nPlease confirm availability and payment details.`;
 
-    const message = `Hello FreshMarket! I want to order:\n\n${itemsText}\n\n*Subtotal:* ₦${cartSubtotal.toLocaleString()}\n*Delivery Fee (${
-      selectedZone?.name || 'Default'
-    }):* ₦${cartDeliveryFee.toLocaleString()}\n*Total:* ₦${cartTotal.toLocaleString()}\n\nPlease confirm availability and payment details.`;
-
-    window.open(
-      `https://wa.me/${storeSettings.whatsappNumber}?text=${encodeURIComponent(message)}`,
-      '_blank'
-    );
-  };
+  const whatsappCheckoutUrl = `https://wa.me/${storeSettings.whatsappNumber}?text=${encodeURIComponent(
+    whatsappMessage
+  )}`;
 
   const handleProceedToCheckout = () => {
     setIsCartOpen(false);
@@ -226,7 +222,7 @@ export const CartDrawer: React.FC = () => {
                     Coupon "{appliedCoupon.code}" Applied (-
                     {appliedCoupon.discountType === 'percentage'
                       ? `${appliedCoupon.value}%`
-                      : `₦${appliedCoupon.value.toLocaleString()}`}
+                      : `${storeSettings.currencySymbol}${appliedCoupon.value.toLocaleString()}`}
                     )
                   </span>
                 </div>
@@ -308,13 +304,15 @@ export const CartDrawer: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={handleWhatsAppOrder}
+              <a
+                href={whatsappCheckoutUrl}
+                target="_blank"
+                rel="noreferrer"
                 className="w-full flex items-center justify-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 font-bold py-2.5 rounded-xl text-xs border border-emerald-200 transition-colors"
               >
                 <MessageCircle className="w-4 h-4 text-emerald-600" />
                 <span>Instant Order via WhatsApp</span>
-              </button>
+              </a>
             </div>
           </div>
         )}
