@@ -202,3 +202,53 @@ export interface StoreSnapshot {
 | `/api/orders/track` | `GET` | Public | Looks up an order by `?q=<orderNumber\|trackingCode>` across devices |
 | `/api/orders/:id/status` | `PATCH` | Owner | Updates order status and optional courier driver details on disk |
 | `/api/store-info` | `GET` | Public | Returns live store name, currency, contact channels & initialization flag |
+
+---
+
+## 6. Seller / Reseller Technical Requirements & Multi-Client Operations
+
+This section outlines the infrastructure, security, provisioning, and scaling requirements needed for you (the vendor/reseller) to reliably package, host, license, and support multiple subscription clients.
+
+### A. Minimum Hosting & Infrastructure Requirements (Per Client Instance)
+- **Node.js Runtime**: `Node.js 20 LTS` (minimum `v18.0+`) with `npm` v9+.
+- **Compute Footprint**: `1 vCPU` / `512 MB RAM` minimum per subscriber container (`1 GB RAM` recommended for high-traffic stores using bulk spreadsheet parsing).
+- **Persistent Disk Volume (`/app/data`)**:
+  - Must be backed by persistent block/volume storage (Docker bind/named volume, Railway/Render persistent disk, VPS SSD, or Cloud Storage FUSE) mapped to `/app/data`.
+  - Stores `data/tenant-config.json` (store branding, subscription metadata, scrypt admin hash, catalog, zones, coupons) and `data/orders.json` (server-side order ledger).
+  - **Critical**: Never deploy on stateless/ephemeral container filesystems without a mounted `/app/data` volume, or client customizations will reset upon container restarts.
+- **Network & TLS Termination**:
+  - App listens on `0.0.0.0:3000` (configurable via `PORT`).
+  - Place behind **Nginx**, **Cloudflare**, **Cloud Run Ingress**, or **Traefik** for automatic HTTPS (`Let's Encrypt`), custom buyer domain routing (`shop.clientdomain.com`), and HTTP/2 compression.
+
+### B. Multi-Client Tenant Isolation Architecture
+Because each subscriber store maintains independent credentials, inventory, bank payout details, and order records, isolate clients using one of two proven topologies:
+1. **Container-Per-Tenant (Recommended for SaaS / Docker / Cloud Run)**:
+   - Run one container per subscriber (`buyer-store-01`, `buyer-store-02`) with its own mounted `./tenants/<client-slug>/data:/app/data` directory and custom domain mapped via reverse proxy.
+   - Guarantees blast-radius isolation, independent upgrades, and zero cross-tenant data leakage.
+2. **Process-Per-Tenant on Single VPS (PM2 + Nginx)**:
+   - Clone or deploy into `/var/www/tenants/<client-slug>` running on unique internal ports (`PORT=3001`, `3002`, ...) managed by PM2, with Nginx server blocks routing each buyer's domain to their assigned port.
+
+### C. Fast Subscriber Provisioning & Golden Templates
+To onboard new paying clients in under 2 minutes:
+- **Zero-Touch CLI Provisioning**: Trigger `npm run init -- --non-interactive ...` from your billing/provisioning webhook or setup script to generate `.env` and `data/tenant-config.json` with a tier-coded license key (`FM-STR-...`, `FM-GRW-...`, `FM-ENT-...`).
+- **Self-Service Onboarding Mode**: Run `npm run init -- --web-wizard` (`SETUP_REQUIRED=true`) before handing over the URL so the buyer completes their own 6-step Setup Wizard on first visit.
+- **Niche Starter Bundles (`.json`)**: Maintain curated `StoreSnapshot` files (e.g., `uk-african-grocer-template.json`, `us-wholesale-food-template.json`, `ng-express-mart-template.json`) exported from **Admin → Store Settings → Export Full Store (.json)**. Import a matching bundle for instant catalog + category + zone setup per client vertical.
+
+### D. Buyer Go-Live Readiness Checklist
+Before transferring a live subscription URL to a client, verify:
+1. **DNS & SSL**: Buyer's custom domain `CNAME`/`A` record resolves to your reverse proxy with a valid TLS certificate.
+2. **Owner Credentials Locked**: Confirm `subscription.setupCompleted === true` and that factory default credentials (`admin@freshmarketglobal.com` / `admin12345`) have been replaced via the Setup Wizard or `npm run init` (verified by absence of the factory demo box on `AdminLoginModal`).
+3. **Bank & WhatsApp Verification**: Test a checkout order to verify the buyer's bank transfer account details, WhatsApp checkout link (`https://wa.me/<digits>`), and PDF receipt branding render accurately.
+4. **Live Card Payment Note**: Built-in card/wallet options (`paystack`, `flutterwave`) currently record customer payment intent for immediate order confirmation; if a buyer requires real-time online card settlement with webhooks, connect their Paystack/Stripe/Flutterwave secret key via a dedicated server route in `server.ts` (`/api/payments/*`)—never expose secret API keys in client `VITE_*` variables.
+
+### E. Scaling Path (Single-Node JSON → Managed Database)
+The current `StoreRepository` (`src/data/repository.ts`) + Express JSON storage handles single-store catalogs (up to ~1,000 SKUs and hundreds of daily orders) with zero external infrastructure cost. When an Enterprise subscriber needs multi-region autoscaling or >5,000 monthly orders:
+1. Keep the React UI and `StoreContext` unchanged.
+2. Replace `readJsonFile` / `writeJsonAtomic` inside `server.ts` routes (`/api/bootstrap`, `/api/initialize`, `/api/tenant/sync`, `/api/orders*`) with **PostgreSQL (Cloud SQL + Drizzle)** or **Firebase Firestore** queries.
+3. Update `StoreRepository` fetch methods to hydrate directly from the database-backed endpoints.
+
+### F. Seller Security, Backup & Upgrade SLA
+- **Automated Daily Backups**: Schedule a daily cron job (or cloud volume snapshot) backing up `/tenants/*/data/tenant-config.json` and `orders.json` to encrypted object storage (S3 / GCS / Backblaze B2).
+- **Secrets Hygiene**: Keep `.gitignore` excluding `.env*` (except `.env.example`) and `data/`. Never embed buyer credentials or `.json` tenant backups inside your base Git image.
+- **Safe Rolling Upgrades**: Before pushing codebase updates to subscriber instances, run `npm run lint && npm run build` in CI; when restarting containers, `/app/data` preserves all buyer branding, inventory, and orders intact.
+

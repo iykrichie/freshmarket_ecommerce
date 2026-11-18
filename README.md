@@ -80,8 +80,9 @@
 ├── server.ts                        # Express backend, security headers & tenant/order APIs
 ├── vite.config.ts                   # Vite + Tailwind v4 bundler config
 ├── README.md                        # Project overview & quick start
+├── PRODUCT_PITCH.md                 # Buyer-ready product intro, sales pitch & pricing tiers
 ├── DEPLOYMENT.md                    # Local testing, CLI provisioning & cloud hosting guide
-├── TECHNICAL_GUIDE.md               # Architecture, data layer best practices & API schema
+├── TECHNICAL_GUIDE.md               # Architecture, data layer & reseller technical requirements
 ├── WALKTHROUGH.md                   # Step-by-step user, owner & reseller walkthroughs
 ├── scripts/
 │   ├── init-store.mjs               # Interactive & CI one-time store initialization CLI
@@ -161,6 +162,7 @@ npm start
 ---
 
 ## 📄 Documentation Suite
+- **[Product Introduction & Sales Pitch (`./PRODUCT_PITCH.md`)](./PRODUCT_PITCH.md)** — Buyer-ready marketing overview, ROI highlights, plan comparison & use cases to share with prospects.
 - **[Walkthrough Guide (`./WALKTHROUGH.md`)](./WALKTHROUGH.md)** — Step-by-step visual/functional guides for Store Owners, Customers, and Resellers.
 - **[Deployment & Provisioning Guide (`./DEPLOYMENT.md`)](./DEPLOYMENT.md)** — Local testing, `npm run init` flags, Docker, Cloud Run, Render/Railway & VPS hosting.
-- **[Technical & Data Layer Guide (`./TECHNICAL_GUIDE.md`)](./TECHNICAL_GUIDE.md)** — Repository architecture, security practices, API contracts & schema models.
+- **[Technical & Data Layer Guide (`./TECHNICAL_GUIDE.md`)](./TECHNICAL_GUIDE.md)** — Repository architecture, security practices, reseller technical requirements & API schemas.
